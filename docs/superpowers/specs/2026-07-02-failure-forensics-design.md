@@ -67,7 +67,7 @@ Triggered when a trace is flagged:
 
 1. Walk spans backward from the final step.
 2. LLM-as-judge (same Gemini model, dedicated judge prompt) scores each step's output quality 1–5 **given that step's input**.
-3. The first (earliest) step whose quality score drops significantly (≥2 points below its upstream input quality) is the root cause.
+3. The first (earliest) step whose output quality score is ≥2 points below the judge's score for that step's input (i.e., the upstream step's output) is the root cause. If no step meets the threshold, the lowest-scoring step is reported as the probable root cause with a lower-confidence flag.
 4. Classify the failure into one of five categories: Extraction Hallucination, Misclassification, Propagation Error, Prompt Failure, Context Loss.
 5. Emit a Pydantic `Diagnosis`: root-cause step, category, per-step judge scores, and a quote-level evidence chain (e.g. "extraction emitted date 2024-13-45; classification inherited it; summary asserted a deadline that does not exist").
 
@@ -86,7 +86,7 @@ Triggered when a trace is flagged:
 
 ## Component 5: React Trace Explorer
 
-- **Trace view:** react-flow horizontal node graph, one node per step, color-coded: green (healthy), yellow (confidence below threshold), red (diagnosed root cause). Clicking a node opens a span drawer with input, output, prompt, raw response, token counts, latency, confidence.
+- **Trace view:** react-flow horizontal node graph, one node per step, color-coded: green (healthy), yellow (self-assessed confidence ≤ 3), red (diagnosed root cause or span error). Clicking a node opens a span drawer with input, output, prompt, raw response, token counts, latency, confidence.
 - **Diff view:** side-by-side comparison of what the step received vs produced vs should have produced (expected value sourced from judge output or eval correction).
 - **One-click flag:** runs backward analysis, then displays the diagnosis panel with the evidence chain.
 - **Dashboard:** most common failure types (bar), failures per step, failure rate over time (recharts).
