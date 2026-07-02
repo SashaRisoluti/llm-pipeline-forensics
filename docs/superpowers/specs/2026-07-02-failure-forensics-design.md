@@ -75,7 +75,7 @@ Triggered when a trace is flagged:
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /runs` | Run pipeline on one document or a batch |
+| `POST /runs` | Run pipeline on one document (batch runs go through the `scripts/run_batch.py` CLI, which paces calls for free-tier rate limits) |
 | `GET /traces` | List traces (SQLite index; filterable by status/step/flag) |
 | `GET /traces/{id}` | Full trace JSON |
 | `POST /traces/{id}/flag` | Flag trace → run forensics |
