@@ -1,4 +1,5 @@
 import os
+import random
 import time
 from dataclasses import dataclass
 from typing import Protocol
@@ -56,7 +57,7 @@ class GeminiClient:
             except Exception as exc:
                 if not _is_rate_limit(exc) or attempt == self._max_retries - 1:
                     raise
-                time.sleep(delay)
+                time.sleep(delay + random.uniform(0, delay / 2))
                 delay *= 2
                 continue
             usage = resp.usage_metadata

@@ -55,6 +55,8 @@ def run_evals(conn, evals_dir, llm, run_at: str) -> list[dict]:
             )
             verdict, _ = llm.generate_structured(prompt, EvalJudgeVerdict)
             passed, score = verdict.score >= 4, verdict.score
+        except ValueError:
+            continue
         except Exception:
             passed, score = False, 1
         conn.execute(

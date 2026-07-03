@@ -59,11 +59,26 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
         return {"trace_id": trace_id}
 
     @app.get("/api/traces")
-    def list_traces():
-        rows = conn.execute(
-            "SELECT t.*, d.root_cause_step, d.category FROM traces t "
-            "LEFT JOIN diagnoses d ON d.trace_id = t.trace_id "
-            "ORDER BY t.created_at DESC").fetchall()
+    def list_traces(status: str | None = None, flagged: bool | None = None,
+                     root_cause_step: str | None = None):
+        sql = ("SELECT t.trace_id, t.doc_id, t.created_at, t.status, t.flagged, "
+               "d.root_cause_step, d.category FROM traces t "
+               "LEFT JOIN diagnoses d ON d.trace_id = t.trace_id")
+        conditions = []
+        params: list = []
+        if status is not None:
+            conditions.append("t.status=?")
+            params.append(status)
+        if flagged is not None:
+            conditions.append("t.flagged=?")
+            params.append(int(flagged))
+        if root_cause_step is not None:
+            conditions.append("d.root_cause_step=?")
+            params.append(root_cause_step)
+        if conditions:
+            sql += " WHERE " + " AND ".join(conditions)
+        sql += " ORDER BY t.created_at DESC"
+        rows = conn.execute(sql, params).fetchall()
         return [dict(r) for r in rows]
 
     @app.get("/api/traces/{trace_id}")

@@ -48,3 +48,12 @@ def test_run_evals_failure_path(tmp_env):
     ])
     results = run_evals(conn, tmp_env["evals"], llm, run_at="2026-07-02T01:00:00Z")
     assert results[0]["passed"] is False
+
+
+def test_run_evals_skips_non_rerunnable_step(tmp_env):
+    conn = connect(tmp_env["db"])
+    intake_case = CASE.model_copy(update={"case_id": "c2", "failing_step": "intake"})
+    create_case(conn, tmp_env["evals"], intake_case, created_at="2026-07-02T00:00:00Z")
+    results = run_evals(conn, tmp_env["evals"], MockLLM([]), run_at="2026-07-02T01:00:00Z")
+    assert results == []
+    assert conn.execute("SELECT COUNT(*) c FROM eval_results").fetchone()["c"] == 0

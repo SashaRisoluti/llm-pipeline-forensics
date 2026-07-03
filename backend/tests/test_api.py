@@ -98,3 +98,15 @@ def test_eval_without_diagnosis_409(client):
     trace_id = run_one(client, llm)
     resp = client.post("/api/evals", json={"trace_id": trace_id, "corrected_output": {}})
     assert resp.status_code == 409
+
+
+def test_trace_list_filters(client):
+    client, llm = client
+    trace_id = run_one(client, llm)
+    llm.responses.extend(FORENSICS)
+    client.post(f"/api/traces/{trace_id}/flag")
+    assert len(client.get("/api/traces?flagged=true").json()) == 1
+    assert client.get("/api/traces?flagged=false").json() == []
+    assert len(client.get("/api/traces?status=ok").json()) == 1
+    assert len(client.get("/api/traces?root_cause_step=extract").json()) == 1
+    assert client.get("/api/traces?root_cause_step=classify").json() == []
