@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api, type Diagnosis, type SpanRecord } from "../api";
 
 export default function DiagnosisPanel({
@@ -12,6 +12,10 @@ export default function DiagnosisPanel({
     JSON.stringify(rootSpan?.output ?? {}, null, 2),
   );
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCorrected(JSON.stringify(rootSpan?.output ?? {}, null, 2));
+  }, [rootSpan]);
 
   async function confirmFlag() {
     try {
