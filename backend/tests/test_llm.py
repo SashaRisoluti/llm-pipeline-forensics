@@ -73,6 +73,16 @@ def test_retries_on_429_then_succeeds() -> None:
     assert calls["n"] == 2
 
 
+def test_retries_on_503_unavailable_then_succeeds() -> None:
+    client, calls = make_client([
+        RuntimeError("503 UNAVAILABLE. This model is currently experiencing high demand."),
+        FakeResponse('{"answer": "ok"}'),
+    ])
+    out, _ = client.generate_structured("q?", Out)
+    assert out.answer == "ok"
+    assert calls["n"] == 2
+
+
 def test_gives_up_after_max_retries() -> None:
     client, _ = make_client([RateLimitError("429")] * 3)
     with pytest.raises(RateLimitError):

@@ -29,9 +29,11 @@ class LLMProvider(Protocol):
     ) -> tuple[T, LLMCall]: ...
 
 
-def _is_rate_limit(exc: Exception) -> bool:
+def _is_retryable(exc: Exception) -> bool:
+    """Rate limits (429) and temporary overload (503) clear up after a backoff."""
     text = str(exc)
-    return isinstance(exc, RateLimitError) or "429" in text or "RESOURCE_EXHAUSTED" in text
+    return isinstance(exc, RateLimitError) or any(
+        marker in text for marker in ("429", "RESOURCE_EXHAUSTED", "503", "UNAVAILABLE"))
 
 
 class GeminiClient:
@@ -65,7 +67,7 @@ class GeminiClient:
             try:
                 resp = self._generate(prompt=prompt, schema=schema)
             except Exception as exc:
-                if not _is_rate_limit(exc) or attempt == self._max_retries - 1:
+                if not _is_retryable(exc) or attempt == self._max_retries - 1:
                     raise
                 time.sleep(delay + random.uniform(0, delay / 2))
                 delay *= 2
