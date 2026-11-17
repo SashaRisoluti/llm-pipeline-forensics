@@ -40,7 +40,7 @@ class GeminiClient:
         from google import genai
 
         self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
-        self._model = model or os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
+        self._model = model or os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
         self._max_retries = max_retries
         self._base_delay = base_delay
 
