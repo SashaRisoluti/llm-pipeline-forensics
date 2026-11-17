@@ -11,6 +11,7 @@ import argparse
 import json
 import sqlite3
 import statistics
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -47,6 +48,13 @@ class Outcome:
     seconds: float
 
 
+@dataclass(frozen=True)
+class EvalRun:
+    outcomes: list[Outcome]
+    n_traces: int
+    n_errored: int
+
+
 def evaluate(
     batch: list[BatchDoc],
     llm: LLMClient,
@@ -55,14 +63,16 @@ def evaluate(
     recorder: PayloadRecorder,
     clock: Callable[[], float] = time.perf_counter,
     pause: float = 0.0,
-) -> list[Outcome]:
+) -> EvalRun:
     outcomes = []
+    n_errored = 0
     for doc in batch:
         trace_id = run_pipeline(doc["text"], doc["doc_id"], llm, tracer, recorder)
+        row = conn.execute(
+            "SELECT status, json_path FROM traces WHERE trace_id=?", (trace_id,)).fetchone()
+        n_errored += row["status"] == "error"
         corruption = doc["corruption"]
         if corruption is not None:
-            row = conn.execute(
-                "SELECT json_path FROM traces WHERE trace_id=?", (trace_id,)).fetchone()
             trace_doc = json.loads(Path(row["json_path"]).read_text(encoding="utf-8"))
             start = clock()
             diagnosis = diagnose(trace_doc, llm)
@@ -71,7 +81,7 @@ def evaluate(
                                     diagnosis.category, seconds))
         if pause:
             time.sleep(pause)
-    return outcomes
+    return EvalRun(outcomes, n_traces=len(batch), n_errored=n_errored)
 
 
 def _row(label: str, outcomes: list[Outcome]) -> str:
@@ -97,6 +107,11 @@ def render_table(outcomes: list[Outcome]) -> str:
     return "\n".join(lines)
 
 
+def render_report(run: EvalRun) -> str:
+    errors = f"Pipeline errors: {run.n_errored}/{run.n_traces} traces"
+    return f"{errors}\n\n{render_table(run.outcomes)}"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=50)
@@ -109,10 +124,12 @@ def main() -> None:
     conn = connect(args.data_dir / "forensics.db")
     recorder = PayloadRecorder()
     tracer = build_tracer(ForensicsExporter(conn, args.data_dir / "traces", recorder))
-    outcomes = evaluate(generate_batch(args.n, args.seed), GeminiClient(), conn, tracer,
-                        recorder, pause=args.pause)
+    run = evaluate(generate_batch(args.n, args.seed), GeminiClient(), conn, tracer,
+                   recorder, pause=args.pause)
     print(f"Diagnosis accuracy on injected corruptions (n={args.n}, seed={args.seed})\n")
-    print(render_table(outcomes))
+    print(render_report(run))
+    if run.n_traces and run.n_errored == run.n_traces:
+        sys.exit("every pipeline run errored: the numbers above measure nothing; check the LLM")
 
 
 if __name__ == "__main__":

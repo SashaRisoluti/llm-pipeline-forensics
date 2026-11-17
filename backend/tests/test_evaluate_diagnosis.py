@@ -10,7 +10,14 @@ from pipeline.models import (
     FailureCategory,
     Summary,
 )
-from scripts.evaluate_diagnosis import EXPECTED, Outcome, evaluate, render_table
+from scripts.evaluate_diagnosis import (
+    EXPECTED,
+    EvalRun,
+    Outcome,
+    evaluate,
+    render_report,
+    render_table,
+)
 from tests.conftest import MockLLM
 from tracing.exporter import ForensicsExporter
 from tracing.recorder import PayloadRecorder
@@ -67,11 +74,12 @@ def test_evaluate_diagnoses_only_corrupted_docs_and_times_them(
     ])
     clock = iter([10.0, 12.5]).__next__
 
-    outcomes = evaluate([doc("d0", None), doc("d1", "strip_dates")],
-                        llm, conn, tracer, recorder, clock=clock)
+    run = evaluate([doc("d0", None), doc("d1", "strip_dates")],
+                   llm, conn, tracer, recorder, clock=clock)
 
-    assert outcomes == [Outcome("d1", "strip_dates", "extract",
-                                FailureCategory.extraction_hallucination, 2.5)]
+    assert run.outcomes == [Outcome("d1", "strip_dates", "extract",
+                                    FailureCategory.extraction_hallucination, 2.5)]
+    assert (run.n_traces, run.n_errored) == (2, 0)
     assert llm.responses == []
 
 
@@ -85,7 +93,15 @@ def test_evaluate_still_diagnoses_when_a_step_errors(tmp_env: dict[str, Path]) -
         CategoryVerdict(category=FailureCategory.prompt_failure, explanation="call died"),
     ])
 
-    [outcome] = evaluate([doc("d0", "currency_mismatch")], llm, conn, tracer, recorder)
+    run = evaluate([doc("d0", "currency_mismatch")], llm, conn, tracer, recorder)
+    [outcome] = run.outcomes
 
     assert outcome.root_cause_step == "extract"
     assert outcome.category == FailureCategory.prompt_failure
+    assert (run.n_traces, run.n_errored) == (1, 1)
+
+
+def test_report_states_pipeline_errors_above_table() -> None:
+    report = render_report(EvalRun(outcomes=[], n_traces=50, n_errored=3))
+    assert report.startswith("Pipeline errors: 3/50 traces\n")
+    assert "| **all** | 0 | – | – | – |" in report
