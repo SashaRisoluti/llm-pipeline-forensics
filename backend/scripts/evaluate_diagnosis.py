@@ -46,6 +46,8 @@ class Outcome:
     root_cause_step: str
     category: FailureCategory
     seconds: float
+    # pipeline step errored: the diagnosis measures infrastructure, so it is not scored
+    errored: bool = False
 
 
 @dataclass(frozen=True)
@@ -70,7 +72,8 @@ def evaluate(
         trace_id = run_pipeline(doc["text"], doc["doc_id"], llm, tracer, recorder)
         row = conn.execute(
             "SELECT status, json_path FROM traces WHERE trace_id=?", (trace_id,)).fetchone()
-        n_errored += row["status"] == "error"
+        errored = row["status"] == "error"
+        n_errored += errored
         corruption = doc["corruption"]
         if corruption is not None:
             trace_doc = json.loads(Path(row["json_path"]).read_text(encoding="utf-8"))
@@ -78,28 +81,30 @@ def evaluate(
             diagnosis = diagnose(trace_doc, llm)
             seconds = clock() - start
             outcomes.append(Outcome(doc["doc_id"], corruption, diagnosis.root_cause_step,
-                                    diagnosis.category, seconds))
+                                    diagnosis.category, seconds, errored))
         if pause:
             time.sleep(pause)
     return EvalRun(outcomes, n_traces=len(batch), n_errored=n_errored)
 
 
 def _row(label: str, outcomes: list[Outcome]) -> str:
-    n = len(outcomes)
+    scored = [o for o in outcomes if not o.errored]
+    head = f"| {label} | {len(outcomes)} | {len(outcomes) - len(scored)} |"
+    n = len(scored)
     if n == 0:
-        return f"| {label} | 0 | – | – | – |"
-    steps = sum(o.root_cause_step == EXPECTED[o.corruption][0] for o in outcomes)
-    cats = sum(o.category == EXPECTED[o.corruption][1] for o in outcomes)
-    median = statistics.median(o.seconds for o in outcomes)
-    return (f"| {label} | {n} | {steps}/{n} ({round(100 * steps / n)}%) "
+        return f"{head} – | – | – |"
+    steps = sum(o.root_cause_step == EXPECTED[o.corruption][0] for o in scored)
+    cats = sum(o.category == EXPECTED[o.corruption][1] for o in scored)
+    median = statistics.median(o.seconds for o in scored)
+    return (f"{head} {steps}/{n} ({round(100 * steps / n)}%) "
             f"| {cats}/{n} ({round(100 * cats / n)}%) | {median:.1f} |")
 
 
 def render_table(outcomes: list[Outcome]) -> str:
     lines = [
-        "| Corruption | n | Root-cause step correct | Category correct "
+        "| Corruption | n | Errored (excluded) | Root-cause step correct | Category correct "
         "| Median flag→diagnosis (s) |",
-        "|---|---|---|---|---|",
+        "|---|---|---|---|---|---|",
     ]
     for name in sorted(EXPECTED):
         lines.append(_row(name, [o for o in outcomes if o.corruption == name]))

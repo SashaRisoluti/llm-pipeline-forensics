@@ -47,14 +47,30 @@ def test_render_table_scores_and_median() -> None:
         Outcome("d2", "ambiguous_category", "classify", FailureCategory.propagation_error, 2.0),
     ]
     table = render_table(outs)
-    assert "| strip_dates | 2 | 1/2 (50%) | 1/2 (50%) | 2.0 |" in table
-    assert "| ambiguous_category | 1 | 1/1 (100%) | 0/1 (0%) | 2.0 |" in table
-    assert "| currency_mismatch | 0 | – | – | – |" in table
-    assert "| **all** | 3 | 2/3 (67%) | 1/3 (33%) | 2.0 |" in table
+    assert "| strip_dates | 2 | 0 | 1/2 (50%) | 1/2 (50%) | 2.0 |" in table
+    assert "| ambiguous_category | 1 | 0 | 1/1 (100%) | 0/1 (0%) | 2.0 |" in table
+    assert "| currency_mismatch | 0 | 0 | – | – | – |" in table
+    assert "| **all** | 3 | 0 | 2/3 (67%) | 1/3 (33%) | 2.0 |" in table
 
 
 def test_render_table_empty_batch() -> None:
-    assert "| **all** | 0 | – | – | – |" in render_table([])
+    assert "| **all** | 0 | 0 | – | – | – |" in render_table([])
+
+
+def test_render_table_excludes_errored_docs_from_scores() -> None:
+    outs = [
+        # rate-limited extract: blamed step matches the expectation but measures nothing
+        Outcome("d0", "currency_mismatch", "extract", FailureCategory.prompt_failure, 0.5,
+                errored=True),
+        Outcome("d1", "currency_mismatch", "summarize", FailureCategory.context_loss, 4.0),
+    ]
+    assert "| currency_mismatch | 2 | 1 | 0/1 (0%) | 0/1 (0%) | 4.0 |" in render_table(outs)
+
+
+def test_render_table_all_errored_shows_dashes() -> None:
+    outs = [Outcome("d0", "strip_dates", "extract", FailureCategory.prompt_failure, 0.5,
+                    errored=True)]
+    assert "| strip_dates | 1 | 1 | – | – | – |" in render_table(outs)
 
 
 def test_evaluate_diagnoses_only_corrupted_docs_and_times_them(
@@ -98,10 +114,11 @@ def test_evaluate_still_diagnoses_when_a_step_errors(tmp_env: dict[str, Path]) -
 
     assert outcome.root_cause_step == "extract"
     assert outcome.category == FailureCategory.prompt_failure
+    assert outcome.errored is True
     assert (run.n_traces, run.n_errored) == (1, 1)
 
 
 def test_report_states_pipeline_errors_above_table() -> None:
     report = render_report(EvalRun(outcomes=[], n_traces=50, n_errored=3))
     assert report.startswith("Pipeline errors: 3/50 traces\n")
-    assert "| **all** | 0 | – | – | – |" in report
+    assert "| **all** | 0 | 0 | – | – | – |" in report
