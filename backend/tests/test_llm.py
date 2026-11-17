@@ -3,7 +3,15 @@ from typing import Any
 import pytest
 from pydantic import BaseModel
 
-from pipeline.llm import GeminiClient, LLMCall, RateLimitError
+from pipeline.llm import (
+    PROVIDERS,
+    GeminiClient,
+    LLMCall,
+    LLMProvider,
+    RateLimitError,
+    make_provider,
+)
+from tests.conftest import MockLLM
 
 
 class Out(BaseModel):
@@ -76,3 +84,28 @@ def test_non_rate_limit_error_not_retried() -> None:
     with pytest.raises(ValueError):
         client.generate_structured("q?", Out)
     assert calls["n"] == 1
+
+
+def test_make_provider_defaults_to_gemini(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    sentinel = MockLLM([])
+    monkeypatch.setitem(PROVIDERS, "gemini", lambda: sentinel)
+    assert make_provider() is sentinel
+
+
+def test_make_provider_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    sentinel = MockLLM([])
+    monkeypatch.setitem(PROVIDERS, "fake", lambda: sentinel)
+    monkeypatch.setenv("LLM_PROVIDER", "fake")
+    assert make_provider() is sentinel
+
+
+def test_make_provider_unknown_name_raises() -> None:
+    with pytest.raises(ValueError, match="nope.*gemini"):
+        make_provider("nope")
+
+
+def test_implementations_satisfy_protocol() -> None:
+    # mypy is the real gate: both must type-check as LLMProvider
+    providers: list[LLMProvider] = [MockLLM([]), GeminiClient.__new__(GeminiClient)]
+    assert len(providers) == 2

@@ -6,7 +6,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 from evals.store import list_cases
-from pipeline.llm import LLMClient
+from pipeline.llm import LLMProvider
 from pipeline.models import DocumentType, ExtractedEntities, RawDocument
 from pipeline.steps import classify, extract, summarize
 
@@ -31,7 +31,7 @@ class EvalJudgeVerdict(BaseModel):
     reasoning: str
 
 
-def _rerun_step(llm: LLMClient, step: str, original_input: dict[str, Any]) -> BaseModel:
+def _rerun_step(llm: LLMProvider, step: str, original_input: dict[str, Any]) -> BaseModel:
     out: BaseModel
     if step == "extract":
         out, _ = extract(llm, RawDocument(**original_input))
@@ -48,7 +48,7 @@ def _rerun_step(llm: LLMClient, step: str, original_input: dict[str, Any]) -> Ba
 
 
 def run_evals(
-    conn: sqlite3.Connection, evals_dir: Path, llm: LLMClient, run_at: str
+    conn: sqlite3.Connection, evals_dir: Path, llm: LLMProvider, run_at: str
 ) -> list[dict[str, Any]]:
     results = []
     for case in list_cases(conn, evals_dir):

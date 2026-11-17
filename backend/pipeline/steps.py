@@ -1,4 +1,4 @@
-from pipeline.llm import LLMCall, LLMClient
+from pipeline.llm import LLMCall, LLMProvider
 from pipeline.models import (
     Classification,
     DocumentType,
@@ -58,20 +58,20 @@ def intake(
     return RawDocument(doc_id=doc_id, text=text, metadata=metadata or {}), None
 
 
-def extract(llm: LLMClient, doc: RawDocument) -> tuple[ExtractedEntities, LLMCall]:
+def extract(llm: LLMProvider, doc: RawDocument) -> tuple[ExtractedEntities, LLMCall]:
     prompt = EXTRACT_PROMPT.format(text=doc.text)
     return llm.generate_structured(prompt, ExtractedEntities)
 
 
 def classify(
-    llm: LLMClient, doc: RawDocument, entities: ExtractedEntities
+    llm: LLMProvider, doc: RawDocument, entities: ExtractedEntities
 ) -> tuple[Classification, LLMCall]:
     prompt = CLASSIFY_PROMPT.format(text=doc.text, entities=entities.model_dump_json())
     return llm.generate_structured(prompt, Classification)
 
 
 def summarize(
-    llm: LLMClient, doc: RawDocument, entities: ExtractedEntities, doc_type: DocumentType
+    llm: LLMProvider, doc: RawDocument, entities: ExtractedEntities, doc_type: DocumentType
 ) -> tuple[Summary, LLMCall]:
     prompt = SUMMARIZE_PROMPT.format(
         doc_type=doc_type.value,

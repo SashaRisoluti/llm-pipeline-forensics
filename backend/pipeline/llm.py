@@ -1,6 +1,7 @@
 import os
 import random
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
@@ -22,7 +23,7 @@ class RateLimitError(Exception):
     pass
 
 
-class LLMClient(Protocol):
+class LLMProvider(Protocol):
     def generate_structured[T: BaseModel](
         self, prompt: str, schema: type[T]
     ) -> tuple[T, LLMCall]: ...
@@ -79,3 +80,14 @@ class GeminiClient:
             )
             return schema.model_validate_json(text), call
         raise ValueError("max_retries must be at least 1")
+
+
+PROVIDERS: dict[str, Callable[[], LLMProvider]] = {"gemini": GeminiClient}
+
+
+def make_provider(name: str | None = None) -> LLMProvider:
+    """Build the provider named by `name`, else $LLM_PROVIDER, else gemini."""
+    name = name or os.environ.get("LLM_PROVIDER", "gemini")
+    if name not in PROVIDERS:
+        raise ValueError(f"unknown LLM provider {name!r}; known: {sorted(PROVIDERS)}")
+    return PROVIDERS[name]()

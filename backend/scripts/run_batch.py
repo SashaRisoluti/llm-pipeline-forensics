@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 
 from pipeline.docgen import generate_batch
-from pipeline.llm import GeminiClient
+from pipeline.llm import make_provider
 from pipeline.orchestrator import run_pipeline
 from tracing.exporter import ForensicsExporter
 from tracing.recorder import PayloadRecorder
@@ -28,7 +28,7 @@ def main() -> None:
     conn = connect(DATA / "forensics.db")
     recorder = PayloadRecorder()
     tracer = build_tracer(ForensicsExporter(conn, DATA / "traces", recorder))
-    llm = GeminiClient()
+    llm = make_provider()
 
     for doc in generate_batch(args.n, args.seed):
         trace_id = run_pipeline(doc["text"], doc["doc_id"], llm, tracer, recorder)

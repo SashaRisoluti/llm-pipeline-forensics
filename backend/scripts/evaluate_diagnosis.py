@@ -21,7 +21,7 @@ from opentelemetry.trace import Tracer
 
 from forensics.engine import diagnose
 from pipeline.docgen import BatchDoc, generate_batch
-from pipeline.llm import GeminiClient, LLMClient
+from pipeline.llm import LLMProvider, make_provider
 from pipeline.models import FailureCategory
 from pipeline.orchestrator import run_pipeline
 from tracing.exporter import ForensicsExporter
@@ -57,7 +57,7 @@ class EvalRun:
 
 def evaluate(
     batch: list[BatchDoc],
-    llm: LLMClient,
+    llm: LLMProvider,
     conn: sqlite3.Connection,
     tracer: Tracer,
     recorder: PayloadRecorder,
@@ -124,7 +124,7 @@ def main() -> None:
     conn = connect(args.data_dir / "forensics.db")
     recorder = PayloadRecorder()
     tracer = build_tracer(ForensicsExporter(conn, args.data_dir / "traces", recorder))
-    run = evaluate(generate_batch(args.n, args.seed), GeminiClient(), conn, tracer,
+    run = evaluate(generate_batch(args.n, args.seed), make_provider(), conn, tracer,
                    recorder, pause=args.pause)
     print(f"Diagnosis accuracy on injected corruptions (n={args.n}, seed={args.seed})\n")
     print(render_report(run))

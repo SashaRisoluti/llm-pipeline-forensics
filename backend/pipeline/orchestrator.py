@@ -4,7 +4,7 @@ from typing import Any
 from opentelemetry.trace import StatusCode, Tracer
 from pydantic import BaseModel
 
-from pipeline.llm import LLMCall, LLMClient
+from pipeline.llm import LLMCall, LLMProvider
 from pipeline.steps import classify, extract, intake, summarize
 from tracing.recorder import PayloadRecorder
 
@@ -14,7 +14,7 @@ class PipelineHalted(Exception):
 
 
 def run_pipeline(
-    text: str, doc_id: str, llm: LLMClient, tracer: Tracer, recorder: PayloadRecorder
+    text: str, doc_id: str, llm: LLMProvider, tracer: Tracer, recorder: PayloadRecorder
 ) -> str:
     """Run the 4-step chain under one trace. Returns the trace_id (hex)."""
     with tracer.start_as_current_span("pipeline") as root:

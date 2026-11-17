@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from evals.runner import run_evals
 from evals.store import EvalCase, create_case
 from forensics.engine import diagnose
-from pipeline.llm import LLMClient
+from pipeline.llm import LLMProvider, make_provider
 from pipeline.models import Diagnosis
 from pipeline.orchestrator import run_pipeline
 from tracing.exporter import ForensicsExporter
@@ -34,15 +34,14 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-def create_app(data_dir: Path, llm: LLMClient | None = None) -> FastAPI:
+def create_app(data_dir: Path, llm: LLMProvider | None = None) -> FastAPI:
     data_dir = Path(data_dir)
     conn = connect(data_dir / "forensics.db")
     recorder = PayloadRecorder()
     tracer = build_tracer(ForensicsExporter(conn, data_dir / "traces", recorder))
     evals_dir = data_dir / "evals"
     if llm is None:
-        from pipeline.llm import GeminiClient
-        llm = GeminiClient()
+        llm = make_provider()
 
     app = FastAPI(title="Failure Forensics")
     app.add_middleware(CORSMiddleware, allow_origins=["*"],
