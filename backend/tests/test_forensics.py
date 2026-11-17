@@ -74,3 +74,25 @@ def test_judge_failure_marks_step_unjudgeable() -> None:
     extract_j = [j for j in d.judgements if j.step == "extract"][0]
     assert "unjudgeable" in extract_j.reasoning
     assert extract_j.score == 3  # neutral placeholder
+
+
+def test_unjudgeable_step_is_skipped_by_root_cause_scan() -> None:
+    trace = make_trace([span("pipeline"), span("intake"), span("extract"),
+                        span("classify"), span("summarize")])
+    llm = MockLLM([
+        RuntimeError("judge down"),               # intake unjudgeable -> neutral 3
+        JudgeVerdict(score=2, reasoning="invented a date"),
+        JudgeVerdict(score=2, reasoning="inherited"),
+        JudgeVerdict(score=2, reasoning="inherited"),
+        CategoryVerdict(category=FailureCategory.extraction_hallucination, explanation="x"),
+    ])
+    d = diagnose(trace, llm)
+    assert d.root_cause_step == "extract"
+    assert d.confident is True
+
+
+def test_all_steps_unjudgeable_is_unconfident() -> None:
+    trace = make_trace([span("pipeline"), span("intake"), span("extract")])
+    llm = MockLLM([RuntimeError("down"), RuntimeError("down"), RuntimeError("down")])
+    d = diagnose(trace, llm)
+    assert d.confident is False

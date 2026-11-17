@@ -49,6 +49,7 @@ class CategoryVerdict(BaseModel):
 def diagnose(trace_doc: dict[str, Any], llm: LLMClient) -> Diagnosis:
     spans = [s for s in trace_doc["spans"] if s["step"] != "pipeline"]
     judgements: list[StepJudgement] = []
+    unjudged: set[str] = set()
     for s in spans:
         if s["status"] == "error":
             judgements.append(StepJudgement(
@@ -65,10 +66,11 @@ def diagnose(trace_doc: dict[str, Any], llm: LLMClient) -> Diagnosis:
             judgements.append(StepJudgement(
                 step=s["step"], score=verdict.score, reasoning=verdict.reasoning))
         except Exception as exc:
+            unjudged.add(s["step"])
             judgements.append(StepJudgement(
                 step=s["step"], score=3, reasoning=f"unjudgeable: {exc}"))
 
-    root_step, confident = _find_root_cause(judgements)
+    root_step, confident = _find_root_cause(judgements, unjudged)
     category = _classify(llm, root_step, judgements)
     evidence = [f"{j.step}: score {j.score}/5 — {j.reasoning}" for j in judgements]
     return Diagnosis(
@@ -78,13 +80,17 @@ def diagnose(trace_doc: dict[str, Any], llm: LLMClient) -> Diagnosis:
     )
 
 
-def _find_root_cause(judgements: list[StepJudgement]) -> tuple[str, bool]:
+def _find_root_cause(
+    judgements: list[StepJudgement], unjudged: set[str]
+) -> tuple[str, bool]:
+    # unjudgeable steps carry a placeholder score: they can be neither blamed nor a baseline
+    judged = [j for j in judgements if j.step not in unjudged]
     prev_score = 5
-    for j in judgements:
+    for j in judged:
         if j.score <= prev_score - 2:
             return j.step, True
         prev_score = j.score
-    worst = min(judgements, key=lambda j: j.score)
+    worst = min(judged or judgements, key=lambda j: j.score)
     return worst.step, False
 
 
