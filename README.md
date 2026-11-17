@@ -7,8 +7,6 @@ On a seeded benchmark of injected faults it names the right failing step for 7 o
 [![tests](https://github.com/SashaRisoluti/llm-pipeline-forensics/actions/workflows/tests.yml/badge.svg)](https://github.com/SashaRisoluti/llm-pipeline-forensics/actions/workflows/tests.yml)
 ![licence](https://img.shields.io/badge/licence-MIT-blue)
 
-[GIF: run a batch → open a flagged trace → see the root-cause step highlighted → confirm → eval case created]
-
 ## Why it matters
 
 When a document pipeline (intake → extraction → classification → summarisation) returns a wrong summary, the visible error is rarely where the fault started. A hallucinated amount in extraction becomes a wrong category, then a confident but wrong summary. Teams debug this by reading logs step by step.
@@ -71,12 +69,6 @@ Reproduce with `cd backend && python -m scripts.evaluate_diagnosis --n 50 --seed
 
 Currency mismatches are traced reliably; ambiguous-category faults are not yet traced to classification. Twelve documents is a small sample, so read the percentages as indicative. The timing is wall-clock and includes retry back-off on the Gemini free tier.
 
-## Interface
-
-[Screenshot 1: dashboard with failure types over time]
-[Screenshot 2: trace view, react-flow graph with the root-cause step highlighted]
-[Screenshot 3: diagnosis panel with judge scores and the input/output diff]
-
 ## API
 
 | Method | Endpoint | Purpose |
@@ -91,7 +83,7 @@ Currency mismatches are traced reliably; ambiguous-category faults are not yet t
 
 ## Stack
 
-Python 3.12 · Pydantic v2 · OpenTelemetry SDK with a custom exporter · SQLite · FastAPI · React + react-flow + recharts · Docker Compose · LLM: Gemini Flash-Lite by default, behind a provider interface (`LLM_PROVIDER`) ([AWS Bedrock / Azure OpenAI adapters: roadmap])
+Python 3.12 · Pydantic v2 · OpenTelemetry SDK with a custom exporter · SQLite · FastAPI · React + react-flow + recharts · Docker Compose · LLM: Gemini Flash-Lite by default, behind a provider interface (`LLM_PROVIDER`) (AWS Bedrock and Azure OpenAI adapters are on the roadmap)
 
 ## Development
 

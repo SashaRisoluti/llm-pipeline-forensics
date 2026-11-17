@@ -5,7 +5,7 @@
 
 ## Purpose
 
-An observability layer for a multi-step AI document pipeline that traces every intermediate step, identifies exactly where failures originate (root cause analysis via LLM-as-judge), and feeds confirmed failures into a growing evaluation dataset. Portfolio project; the demo headline is: *"Reduces mean time to root cause for AI pipeline failures from hours of manual debugging to seconds of automated diagnosis."*
+An observability layer for a multi-step AI document pipeline that traces every intermediate step, identifies exactly where failures originate (root cause analysis via LLM-as-judge), and feeds confirmed failures into a growing evaluation dataset. the demo headline is: *"Reduces mean time to root cause for AI pipeline failures from hours of manual debugging to seconds of automated diagnosis."*
 
 ## Locked Decisions
 
