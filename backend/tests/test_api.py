@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -5,9 +7,15 @@ from api.app import create_app
 from evals.runner import EvalJudgeVerdict
 from forensics.engine import CategoryVerdict, JudgeVerdict
 from pipeline.models import (
-    Classification, DocumentType, ExtractedEntities, FailureCategory, Summary,
+    Classification,
+    DocumentType,
+    ExtractedEntities,
+    FailureCategory,
+    Summary,
 )
 from tests.conftest import MockLLM
+
+Client = tuple[TestClient, MockLLM]
 
 HAPPY = [
     ExtractedEntities(dates=["2026-01-01"], confidence=5),
@@ -26,21 +34,22 @@ FORENSICS = [
 
 
 @pytest.fixture
-def client(tmp_path):
+def app_client(tmp_path: Path) -> Client:
     llm = MockLLM()
     app = create_app(tmp_path / "data", llm=llm)
     return TestClient(app), llm
 
 
-def run_one(client, llm):
+def run_one(client: TestClient, llm: MockLLM) -> str:
     llm.responses.extend(HAPPY)
     resp = client.post("/api/runs", json={"text": "Invoice ...", "doc_id": "d1"})
     assert resp.status_code == 200
-    return resp.json()["trace_id"]
+    trace_id: str = resp.json()["trace_id"]
+    return trace_id
 
 
-def test_run_and_get_trace(client):
-    client, llm = client
+def test_run_and_get_trace(app_client: Client) -> None:
+    client, llm = app_client
     trace_id = run_one(client, llm)
     listing = client.get("/api/traces").json()
     assert listing[0]["trace_id"] == trace_id
@@ -49,13 +58,13 @@ def test_run_and_get_trace(client):
         "pipeline", "intake", "extract", "classify", "summarize"]
 
 
-def test_get_missing_trace_404(client):
-    client, _ = client
+def test_get_missing_trace_404(app_client: Client) -> None:
+    client, _ = app_client
     assert client.get("/api/traces/deadbeef").status_code == 404
 
 
-def test_flag_runs_forensics_and_stores_diagnosis(client):
-    client, llm = client
+def test_flag_runs_forensics_and_stores_diagnosis(app_client: Client) -> None:
+    client, llm = app_client
     trace_id = run_one(client, llm)
     llm.responses.extend(FORENSICS)
     diagnosis = client.post(f"/api/traces/{trace_id}/flag").json()
@@ -66,8 +75,8 @@ def test_flag_runs_forensics_and_stores_diagnosis(client):
     assert client.get("/api/traces").json()[0]["flagged"] == 1
 
 
-def test_eval_lifecycle_and_stats(client):
-    client, llm = client
+def test_eval_lifecycle_and_stats(app_client: Client) -> None:
+    client, llm = app_client
     trace_id = run_one(client, llm)
     llm.responses.extend(FORENSICS)
     client.post(f"/api/traces/{trace_id}/flag")
@@ -93,15 +102,15 @@ def test_eval_lifecycle_and_stats(client):
     assert stats["rate_over_time"][0]["total"] == 1
 
 
-def test_eval_without_diagnosis_409(client):
-    client, llm = client
+def test_eval_without_diagnosis_409(app_client: Client) -> None:
+    client, llm = app_client
     trace_id = run_one(client, llm)
     resp = client.post("/api/evals", json={"trace_id": trace_id, "corrected_output": {}})
     assert resp.status_code == 409
 
 
-def test_trace_list_filters(client):
-    client, llm = client
+def test_trace_list_filters(app_client: Client) -> None:
+    client, llm = app_client
     trace_id = run_one(client, llm)
     llm.responses.extend(FORENSICS)
     client.post(f"/api/traces/{trace_id}/flag")

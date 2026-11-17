@@ -1,5 +1,7 @@
 import random
 import re
+from collections.abc import Callable
+from typing import TypedDict
 
 COMPANIES = ["Acme Corp", "Globex", "Initech", "Umbrella Ltd", "Stark Industries",
              "Wayne Enterprises", "Hooli", "Vandelay Industries"]
@@ -78,22 +80,29 @@ def corrupt_ambiguous_category(text: str, seed: int = 0) -> str:
     return text + rng.choice(AMBIGUOUS_SENTENCES)
 
 
-CORRUPTORS = {
+CORRUPTORS: dict[str, Callable[[str, int], str]] = {
     "strip_dates": lambda text, seed: corrupt_strip_dates(text),
     "currency_mismatch": lambda text, seed: corrupt_currency_mismatch(text),
     "ambiguous_category": corrupt_ambiguous_category,
 }
 
 
-def generate_batch(n: int, seed: int, corruption_rate: float = 0.2) -> list[dict]:
+class BatchDoc(TypedDict):
+    doc_id: str
+    doc_type: str
+    corruption: str | None
+    text: str
+
+
+def generate_batch(n: int, seed: int, corruption_rate: float = 0.2) -> list[BatchDoc]:
     rng = random.Random(seed)
     doc_types = list(TEMPLATES)
-    batch = []
+    batch: list[BatchDoc] = []
     corruptor_names = sorted(CORRUPTORS)
     for i in range(n):
         doc_type = doc_types[i % len(doc_types)]
         text = generate_doc(doc_type, seed=seed + i)
-        corruption = None
+        corruption: str | None = None
         if rng.random() < corruption_rate:
             corruption = corruptor_names[i % len(corruptor_names)]
             text = CORRUPTORS[corruption](text, seed + i)

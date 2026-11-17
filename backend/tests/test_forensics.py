@@ -1,18 +1,20 @@
+from typing import Any
+
 from forensics.engine import CategoryVerdict, JudgeVerdict, diagnose
 from pipeline.models import FailureCategory
 from tests.conftest import MockLLM
 
 
-def make_trace(spans):
+def make_trace(spans: list[dict[str, Any]]) -> dict[str, Any]:
     return {"trace_id": "t1", "doc_id": "d1", "status": "ok", "spans": spans}
 
 
-def span(step, status="ok", error=None):
+def span(step: str, status: str = "ok", error: str | None = None) -> dict[str, Any]:
     return {"step": step, "status": status, "error": error,
             "input": {"x": 1}, "output": {"y": 2}, "confidence": 4}
 
 
-def test_root_cause_is_first_big_drop():
+def test_root_cause_is_first_big_drop() -> None:
     trace = make_trace([span("pipeline"), span("intake"), span("extract"),
                         span("classify"), span("summarize")])
     llm = MockLLM([
@@ -31,7 +33,7 @@ def test_root_cause_is_first_big_drop():
     assert any("hallucinated" in e for e in d.evidence_chain)
 
 
-def test_no_big_drop_reports_worst_step_unconfident():
+def test_no_big_drop_reports_worst_step_unconfident() -> None:
     trace = make_trace([span("pipeline"), span("intake"), span("extract"),
                         span("classify"), span("summarize")])
     llm = MockLLM([
@@ -46,7 +48,7 @@ def test_no_big_drop_reports_worst_step_unconfident():
     assert d.confident is False
 
 
-def test_errored_span_scores_one_without_judge_call():
+def test_errored_span_scores_one_without_judge_call() -> None:
     trace = make_trace([span("pipeline"), span("intake"),
                         span("extract", status="error", error="LLM exploded")])
     llm = MockLLM([
@@ -61,7 +63,7 @@ def test_errored_span_scores_one_without_judge_call():
     assert "LLM exploded" in extract_j.reasoning
 
 
-def test_judge_failure_marks_step_unjudgeable():
+def test_judge_failure_marks_step_unjudgeable() -> None:
     trace = make_trace([span("pipeline"), span("intake"), span("extract")])
     llm = MockLLM([
         JudgeVerdict(score=5, reasoning="ok"),

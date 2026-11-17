@@ -1,7 +1,8 @@
 import json
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 from evals.runner import run_evals
 from evals.store import EvalCase, create_case
 from forensics.engine import diagnose
+from pipeline.llm import LLMClient
 from pipeline.models import Diagnosis
 from pipeline.orchestrator import run_pipeline
 from tracing.exporter import ForensicsExporter
@@ -25,14 +27,14 @@ class RunRequest(BaseModel):
 
 class EvalCreateRequest(BaseModel):
     trace_id: str
-    corrected_output: dict
+    corrected_output: dict[str, Any]
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
-def create_app(data_dir: Path, llm=None) -> FastAPI:
+def create_app(data_dir: Path, llm: LLMClient | None = None) -> FastAPI:
     data_dir = Path(data_dir)
     conn = connect(data_dir / "forensics.db")
     recorder = PayloadRecorder()
@@ -46,26 +48,27 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
     app.add_middleware(CORSMiddleware, allow_origins=["*"],
                        allow_methods=["*"], allow_headers=["*"])
 
-    def load_trace(trace_id: str) -> dict:
+    def load_trace(trace_id: str) -> dict[str, Any]:
         row = conn.execute(
             "SELECT json_path FROM traces WHERE trace_id=?", (trace_id,)).fetchone()
         if row is None:
             raise HTTPException(404, f"trace {trace_id} not found")
-        return json.loads(Path(row["json_path"]).read_text(encoding="utf-8"))
+        doc: dict[str, Any] = json.loads(Path(row["json_path"]).read_text(encoding="utf-8"))
+        return doc
 
     @app.post("/api/runs")
-    def run(req: RunRequest):
+    def run(req: RunRequest) -> dict[str, str]:
         trace_id = run_pipeline(req.text, req.doc_id, llm, tracer, recorder)
         return {"trace_id": trace_id}
 
     @app.get("/api/traces")
     def list_traces(status: str | None = None, flagged: bool | None = None,
-                     root_cause_step: str | None = None):
+                     root_cause_step: str | None = None) -> list[dict[str, Any]]:
         sql = ("SELECT t.trace_id, t.doc_id, t.created_at, t.status, t.flagged, "
                "d.root_cause_step, d.category FROM traces t "
                "LEFT JOIN diagnoses d ON d.trace_id = t.trace_id")
         conditions = []
-        params: list = []
+        params: list[Any] = []
         if status is not None:
             conditions.append("t.status=?")
             params.append(status)
@@ -82,11 +85,11 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
         return [dict(r) for r in rows]
 
     @app.get("/api/traces/{trace_id}")
-    def get_trace(trace_id: str):
+    def get_trace(trace_id: str) -> dict[str, Any]:
         return load_trace(trace_id)
 
     @app.post("/api/traces/{trace_id}/flag")
-    def flag(trace_id: str):
+    def flag(trace_id: str) -> dict[str, Any]:
         trace_doc = load_trace(trace_id)
         diagnosis = diagnose(trace_doc, llm)
         conn.execute(
@@ -100,15 +103,16 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
         return diagnosis.model_dump()
 
     @app.get("/api/traces/{trace_id}/diagnosis")
-    def get_diagnosis(trace_id: str):
+    def get_diagnosis(trace_id: str) -> dict[str, Any]:
         row = conn.execute(
             "SELECT json FROM diagnoses WHERE trace_id=?", (trace_id,)).fetchone()
         if row is None:
             raise HTTPException(404, "no diagnosis; flag the trace first")
-        return json.loads(row["json"])
+        diagnosis: dict[str, Any] = json.loads(row["json"])
+        return diagnosis
 
     @app.post("/api/evals")
-    def create_eval(req: EvalCreateRequest):
+    def create_eval(req: EvalCreateRequest) -> dict[str, Any]:
         row = conn.execute(
             "SELECT json FROM diagnoses WHERE trace_id=?", (req.trace_id,)).fetchone()
         if row is None:
@@ -130,21 +134,21 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
         return case.model_dump()
 
     @app.get("/api/evals")
-    def list_evals(trace_id: str | None = None):
+    def list_evals(trace_id: str | None = None) -> list[dict[str, Any]]:
         sql = ("SELECT case_id, trace_id, failing_step, category, created_at "
                "FROM eval_cases")
-        params: tuple = ()
+        params: tuple[str, ...] = ()
         if trace_id:
             sql += " WHERE trace_id=?"
             params = (trace_id,)
         return [dict(r) for r in conn.execute(sql + " ORDER BY created_at", params)]
 
     @app.post("/api/evals/run")
-    def run_eval_dataset():
+    def run_eval_dataset() -> list[dict[str, Any]]:
         return run_evals(conn, evals_dir, llm, run_at=_now())
 
     @app.get("/api/stats")
-    def stats():
+    def stats() -> dict[str, Any]:
         failure_types = [
             {"category": r["category"], "count": r["c"]}
             for r in conn.execute(
@@ -175,4 +179,5 @@ def create_app(data_dir: Path, llm=None) -> FastAPI:
 
 def create_default_app() -> FastAPI:
     """uvicorn api.app:create_default_app --factory"""
-    return create_app(Path(os.environ.get("DATA_DIR", str(Path(__file__).resolve().parents[2] / "data"))))
+    default = Path(__file__).resolve().parents[2] / "data"
+    return create_app(Path(os.environ.get("DATA_DIR", str(default))))

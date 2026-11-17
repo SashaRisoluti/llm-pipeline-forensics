@@ -1,11 +1,11 @@
 import json
+from pathlib import Path
 
 from evals.runner import EvalJudgeVerdict, run_evals
 from evals.store import EvalCase, create_case, list_cases
 from pipeline.models import ExtractedEntities, FailureCategory
 from tests.conftest import MockLLM
 from tracing.store import connect
-
 
 CASE = EvalCase(
     case_id="c1", trace_id="t1", failing_step="extract",
@@ -16,7 +16,7 @@ CASE = EvalCase(
 )
 
 
-def test_create_and_list_case(tmp_env):
+def test_create_and_list_case(tmp_env: dict[str, Path]) -> None:
     conn = connect(tmp_env["db"])
     create_case(conn, tmp_env["evals"], CASE, created_at="2026-07-02T00:00:00Z")
     cases = list_cases(conn, tmp_env["evals"])
@@ -26,7 +26,7 @@ def test_create_and_list_case(tmp_env):
     assert on_disk["corrected_output"]["dates"] == ["2026-01-01"]
 
 
-def test_run_evals_records_pass_and_fail(tmp_env):
+def test_run_evals_records_pass_and_fail(tmp_env: dict[str, Path]) -> None:
     conn = connect(tmp_env["db"])
     create_case(conn, tmp_env["evals"], CASE, created_at="2026-07-02T00:00:00Z")
     llm = MockLLM([
@@ -39,7 +39,7 @@ def test_run_evals_records_pass_and_fail(tmp_env):
     assert row["passed"] == 1 and row["score"] == 5
 
 
-def test_run_evals_failure_path(tmp_env):
+def test_run_evals_failure_path(tmp_env: dict[str, Path]) -> None:
     conn = connect(tmp_env["db"])
     create_case(conn, tmp_env["evals"], CASE, created_at="2026-07-02T00:00:00Z")
     llm = MockLLM([
@@ -50,7 +50,7 @@ def test_run_evals_failure_path(tmp_env):
     assert results[0]["passed"] is False
 
 
-def test_run_evals_skips_non_rerunnable_step(tmp_env):
+def test_run_evals_skips_non_rerunnable_step(tmp_env: dict[str, Path]) -> None:
     conn = connect(tmp_env["db"])
     intake_case = CASE.model_copy(update={"case_id": "c2", "failing_step": "intake"})
     create_case(conn, tmp_env["evals"], intake_case, created_at="2026-07-02T00:00:00Z")

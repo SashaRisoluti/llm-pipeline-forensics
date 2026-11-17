@@ -1,4 +1,6 @@
 import json
+import sqlite3
+from pathlib import Path
 
 from tracing.exporter import ForensicsExporter
 from tracing.recorder import PayloadRecorder
@@ -6,7 +8,7 @@ from tracing.setup import build_tracer
 from tracing.store import connect
 
 
-def run_fake_trace(tmp_env):
+def run_fake_trace(tmp_env: dict[str, Path]) -> tuple[sqlite3.Connection, Path, str]:
     """Emit a root span with one child through a real OTel tracer."""
     conn = connect(tmp_env["db"])
     recorder = PayloadRecorder()
@@ -26,7 +28,7 @@ def run_fake_trace(tmp_env):
     return conn, tmp_env["traces"], trace_id
 
 
-def test_sqlite_rows_written(tmp_env):
+def test_sqlite_rows_written(tmp_env: dict[str, Path]) -> None:
     conn, _, trace_id = run_fake_trace(tmp_env)
     spans = conn.execute(
         "SELECT * FROM spans WHERE trace_id=? ORDER BY started_at", (trace_id,)
@@ -41,7 +43,7 @@ def test_sqlite_rows_written(tmp_env):
     assert trace_row["status"] == "ok"
 
 
-def test_json_file_has_full_payloads(tmp_env):
+def test_json_file_has_full_payloads(tmp_env: dict[str, Path]) -> None:
     _, traces_dir, trace_id = run_fake_trace(tmp_env)
     doc = json.loads((traces_dir / f"{trace_id}.json").read_text())
     assert doc["trace_id"] == trace_id
@@ -52,7 +54,7 @@ def test_json_file_has_full_payloads(tmp_env):
     assert steps["extract"]["latency_ms"] >= 0
 
 
-def test_error_span_marks_trace(tmp_env):
+def test_error_span_marks_trace(tmp_env: dict[str, Path]) -> None:
     from opentelemetry.trace import StatusCode
 
     conn = connect(tmp_env["db"])
@@ -60,10 +62,12 @@ def test_error_span_marks_trace(tmp_env):
     exporter = ForensicsExporter(conn, tmp_env["traces"], recorder)
     tracer = build_tracer(exporter)
 
-    with tracer.start_as_current_span("pipeline") as root:
-        with tracer.start_as_current_span("extract") as child:
-            child.set_status(StatusCode.ERROR, "boom")
-            recorder.record(child.get_span_context().span_id, error="boom")
+    with (
+        tracer.start_as_current_span("pipeline") as root,
+        tracer.start_as_current_span("extract") as child,
+    ):
+        child.set_status(StatusCode.ERROR, "boom")
+        recorder.record(child.get_span_context().span_id, error="boom")
     trace_id = format(root.get_span_context().trace_id, "032x")
     row = conn.execute("SELECT status FROM traces WHERE trace_id=?", (trace_id,)).fetchone()
     assert row["status"] == "error"

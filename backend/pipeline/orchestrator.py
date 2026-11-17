@@ -1,13 +1,21 @@
-from opentelemetry.trace import StatusCode
+from collections.abc import Callable
+from typing import Any
 
+from opentelemetry.trace import StatusCode, Tracer
+from pydantic import BaseModel
+
+from pipeline.llm import LLMCall, LLMClient
 from pipeline.steps import classify, extract, intake, summarize
+from tracing.recorder import PayloadRecorder
 
 
 class PipelineHalted(Exception):
     """A step failed; downstream steps are skipped."""
 
 
-def run_pipeline(text: str, doc_id: str, llm, tracer, recorder) -> str:
+def run_pipeline(
+    text: str, doc_id: str, llm: LLMClient, tracer: Tracer, recorder: PayloadRecorder
+) -> str:
     """Run the 4-step chain under one trace. Returns the trace_id (hex)."""
     with tracer.start_as_current_span("pipeline") as root:
         trace_id = format(root.get_span_context().trace_id, "032x")
@@ -31,7 +39,13 @@ def run_pipeline(text: str, doc_id: str, llm, tracer, recorder) -> str:
     return trace_id
 
 
-def _step(tracer, recorder, name: str, inp: dict, fn):
+def _step[T: BaseModel](
+    tracer: Tracer,
+    recorder: PayloadRecorder,
+    name: str,
+    inp: dict[str, Any],
+    fn: Callable[[], tuple[T, LLMCall | None]],
+) -> T:
     with tracer.start_as_current_span(name) as span:
         span_id = span.get_span_context().span_id
         recorder.record(span_id, input=inp)
@@ -41,7 +55,7 @@ def _step(tracer, recorder, name: str, inp: dict, fn):
             span.set_status(StatusCode.ERROR, str(exc))
             recorder.record(span_id, error=str(exc))
             raise PipelineHalted(f"{name}: {exc}") from exc
-        payload = {"output": output.model_dump(mode="json")}
+        payload: dict[str, Any] = {"output": output.model_dump(mode="json")}
         if call is not None:
             payload.update(prompt=call.prompt, raw_response=call.raw_response,
                            tokens_in=call.tokens_in, tokens_out=call.tokens_out)

@@ -3,7 +3,6 @@
 Usage (from backend/): python -m scripts.run_batch --n 50 --seed 42
 """
 import argparse
-import sys
 import time
 from pathlib import Path
 
@@ -18,7 +17,7 @@ from tracing.store import connect
 DATA = Path(__file__).resolve().parents[2] / "data"
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--n", type=int, default=50)
     parser.add_argument("--seed", type=int, default=42)
@@ -39,4 +38,4 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    main()

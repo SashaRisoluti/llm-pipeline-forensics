@@ -1,5 +1,6 @@
-import json
+import sqlite3
 from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -11,12 +12,14 @@ class EvalCase(BaseModel):
     trace_id: str
     failing_step: str
     category: FailureCategory
-    original_input: dict
-    bad_output: dict
-    corrected_output: dict
+    original_input: dict[str, Any]
+    bad_output: dict[str, Any]
+    corrected_output: dict[str, Any]
 
 
-def create_case(conn, evals_dir: Path, case: EvalCase, created_at: str):
+def create_case(
+    conn: sqlite3.Connection, evals_dir: Path, case: EvalCase, created_at: str
+) -> None:
     evals_dir.mkdir(parents=True, exist_ok=True)
     path = evals_dir / f"{case.case_id}.json"
     path.write_text(case.model_dump_json(indent=2), encoding="utf-8")
@@ -30,7 +33,7 @@ def create_case(conn, evals_dir: Path, case: EvalCase, created_at: str):
     conn.commit()
 
 
-def list_cases(conn, evals_dir: Path) -> list[EvalCase]:
+def list_cases(conn: sqlite3.Connection, evals_dir: Path) -> list[EvalCase]:
     rows = conn.execute("SELECT json_path FROM eval_cases ORDER BY created_at").fetchall()
     return [EvalCase.model_validate_json(Path(r["json_path"]).read_text(encoding="utf-8"))
             for r in rows]

@@ -1,6 +1,6 @@
-def test_packages_import():
-    import pipeline
-    import tracing
-    import forensics
-    import evals
-    import api
+import importlib
+
+
+def test_packages_import() -> None:
+    for name in ("pipeline", "tracing", "forensics", "evals", "api"):
+        importlib.import_module(name)

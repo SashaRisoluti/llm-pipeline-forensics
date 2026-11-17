@@ -2,9 +2,12 @@ import os
 import random
 import time
 from dataclasses import dataclass
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from google.genai import types
 
 
 @dataclass
@@ -20,9 +23,9 @@ class RateLimitError(Exception):
 
 
 class LLMClient(Protocol):
-    def generate_structured(
-        self, prompt: str, schema: type[BaseModel]
-    ) -> tuple[BaseModel, LLMCall]: ...
+    def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T]
+    ) -> tuple[T, LLMCall]: ...
 
 
 def _is_rate_limit(exc: Exception) -> bool:
@@ -31,7 +34,9 @@ def _is_rate_limit(exc: Exception) -> bool:
 
 
 class GeminiClient:
-    def __init__(self, model: str | None = None, max_retries: int = 5, base_delay: float = 2.0):
+    def __init__(
+        self, model: str | None = None, max_retries: int = 5, base_delay: float = 2.0
+    ) -> None:
         from google import genai
 
         self._client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
@@ -39,7 +44,9 @@ class GeminiClient:
         self._max_retries = max_retries
         self._base_delay = base_delay
 
-    def _generate(self, *, prompt: str, schema: type[BaseModel]):
+    def _generate(
+        self, *, prompt: str, schema: type[BaseModel]
+    ) -> "types.GenerateContentResponse":
         return self._client.models.generate_content(
             model=self._model,
             contents=prompt,
@@ -49,7 +56,9 @@ class GeminiClient:
             },
         )
 
-    def generate_structured(self, prompt: str, schema: type[BaseModel]):
+    def generate_structured[T: BaseModel](
+        self, prompt: str, schema: type[T]
+    ) -> tuple[T, LLMCall]:
         delay = self._base_delay
         for attempt in range(self._max_retries):
             try:
@@ -61,10 +70,12 @@ class GeminiClient:
                 delay *= 2
                 continue
             usage = resp.usage_metadata
+            text = resp.text or ""
             call = LLMCall(
                 prompt=prompt,
-                raw_response=resp.text,
-                tokens_in=usage.prompt_token_count or 0,
-                tokens_out=usage.candidates_token_count or 0,
+                raw_response=text,
+                tokens_in=(usage.prompt_token_count or 0) if usage else 0,
+                tokens_out=(usage.candidates_token_count or 0) if usage else 0,
             )
-            return schema.model_validate_json(resp.text), call
+            return schema.model_validate_json(text), call
+        raise ValueError("max_retries must be at least 1")

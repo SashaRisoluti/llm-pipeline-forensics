@@ -1,7 +1,9 @@
 import json
+from typing import Any
 
 from pydantic import BaseModel, Field
 
+from pipeline.llm import LLMClient
 from pipeline.models import Diagnosis, FailureCategory, StepJudgement
 
 JUDGE_PROMPT = """You are a strict QA judge for the "{step}" step of a document pipeline.
@@ -44,7 +46,7 @@ class CategoryVerdict(BaseModel):
     explanation: str
 
 
-def diagnose(trace_doc: dict, llm) -> Diagnosis:
+def diagnose(trace_doc: dict[str, Any], llm: LLMClient) -> Diagnosis:
     spans = [s for s in trace_doc["spans"] if s["step"] != "pipeline"]
     judgements: list[StepJudgement] = []
     for s in spans:
@@ -86,7 +88,7 @@ def _find_root_cause(judgements: list[StepJudgement]) -> tuple[str, bool]:
     return worst.step, False
 
 
-def _classify(llm, root_step: str, judgements: list[StepJudgement]) -> FailureCategory:
+def _classify(llm: LLMClient, root_step: str, judgements: list[StepJudgement]) -> FailureCategory:
     findings = "\n".join(f"- {j.step}: {j.score}/5 — {j.reasoning}" for j in judgements)
     prompt = CATEGORY_PROMPT.format(step=root_step, findings=findings)
     try:

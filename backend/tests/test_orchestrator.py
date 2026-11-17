@@ -1,7 +1,14 @@
 import json
+import sqlite3
+from pathlib import Path
+
+from opentelemetry.trace import Tracer
 
 from pipeline.models import (
-    Classification, DocumentType, ExtractedEntities, Summary,
+    Classification,
+    DocumentType,
+    ExtractedEntities,
+    Summary,
 )
 from pipeline.orchestrator import run_pipeline
 from tests.conftest import MockLLM
@@ -11,7 +18,9 @@ from tracing.setup import build_tracer
 from tracing.store import connect
 
 
-def build_env(tmp_env, llm):
+def build_env(
+    tmp_env: dict[str, Path], llm: MockLLM
+) -> tuple[sqlite3.Connection, Tracer, PayloadRecorder]:
     conn = connect(tmp_env["db"])
     recorder = PayloadRecorder()
     tracer = build_tracer(ForensicsExporter(conn, tmp_env["traces"], recorder))
@@ -25,7 +34,7 @@ HAPPY = [
 ]
 
 
-def test_happy_path_writes_five_spans(tmp_env):
+def test_happy_path_writes_five_spans(tmp_env: dict[str, Path]) -> None:
     llm = MockLLM(list(HAPPY))
     conn, tracer, recorder = build_env(tmp_env, llm)
     trace_id = run_pipeline("doc text", "d1", llm, tracer, recorder)
@@ -37,14 +46,14 @@ def test_happy_path_writes_five_spans(tmp_env):
     ).fetchone()["status"] == "ok"
 
 
-def test_trace_json_carries_step_payloads(tmp_env):
+def test_trace_json_carries_step_payloads(tmp_env: dict[str, Path]) -> None:
     llm = MockLLM(list(HAPPY))
     conn, tracer, recorder = build_env(tmp_env, llm)
     trace_id = run_pipeline("doc text", "d1", llm, tracer, recorder)
     path = conn.execute(
         "SELECT json_path FROM traces WHERE trace_id=?", (trace_id,)
     ).fetchone()["json_path"]
-    doc = json.loads(open(path, encoding="utf-8").read())
+    doc = json.loads(Path(path).read_text(encoding="utf-8"))
     spans = {s["step"]: s for s in doc["spans"]}
     assert spans["extract"]["output"]["dates"] == ["2026-01-01"]
     assert spans["extract"]["confidence"] == 5
@@ -53,7 +62,7 @@ def test_trace_json_carries_step_payloads(tmp_env):
     assert doc["doc_id"] == "d1"
 
 
-def test_step_failure_skips_downstream_but_flushes_trace(tmp_env):
+def test_step_failure_skips_downstream_but_flushes_trace(tmp_env: dict[str, Path]) -> None:
     llm = MockLLM([RuntimeError("LLM exploded")])  # extract raises
     conn, tracer, recorder = build_env(tmp_env, llm)
     trace_id = run_pipeline("doc text", "d1", llm, tracer, recorder)

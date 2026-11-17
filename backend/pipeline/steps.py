@@ -1,6 +1,10 @@
 from pipeline.llm import LLMCall, LLMClient
 from pipeline.models import (
-    Classification, DocumentType, ExtractedEntities, RawDocument, Summary,
+    Classification,
+    DocumentType,
+    ExtractedEntities,
+    RawDocument,
+    Summary,
 )
 
 EXTRACT_PROMPT = """You are an entity extraction engine for business documents.
@@ -48,7 +52,9 @@ EXTRACTED ENTITIES:
 """
 
 
-def intake(text: str, doc_id: str, metadata: dict | None = None):
+def intake(
+    text: str, doc_id: str, metadata: dict[str, str] | None = None
+) -> tuple[RawDocument, None]:
     return RawDocument(doc_id=doc_id, text=text, metadata=metadata or {}), None
 
 

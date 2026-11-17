@@ -1,9 +1,13 @@
 import json
+import sqlite3
+from pathlib import Path
+from typing import Any
 
 from pydantic import BaseModel, Field
 
 from evals.store import list_cases
-from pipeline.models import Classification, DocumentType, ExtractedEntities, RawDocument
+from pipeline.llm import LLMClient
+from pipeline.models import DocumentType, ExtractedEntities, RawDocument
 from pipeline.steps import classify, extract, summarize
 
 EVAL_JUDGE_PROMPT = """An earlier pipeline failure produced a corrected reference output.
@@ -27,7 +31,8 @@ class EvalJudgeVerdict(BaseModel):
     reasoning: str
 
 
-def _rerun_step(llm, step: str, original_input: dict):
+def _rerun_step(llm: LLMClient, step: str, original_input: dict[str, Any]) -> BaseModel:
+    out: BaseModel
     if step == "extract":
         out, _ = extract(llm, RawDocument(**original_input))
     elif step == "classify":
@@ -42,7 +47,9 @@ def _rerun_step(llm, step: str, original_input: dict):
     return out
 
 
-def run_evals(conn, evals_dir, llm, run_at: str) -> list[dict]:
+def run_evals(
+    conn: sqlite3.Connection, evals_dir: Path, llm: LLMClient, run_at: str
+) -> list[dict[str, Any]]:
     results = []
     for case in list_cases(conn, evals_dir):
         try:

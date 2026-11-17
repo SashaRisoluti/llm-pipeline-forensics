@@ -1,9 +1,9 @@
 from opentelemetry import trace
 from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+from opentelemetry.sdk.trace.export import SimpleSpanProcessor, SpanExporter
 
 
-def build_tracer(exporter):
+def build_tracer(exporter: SpanExporter) -> trace.Tracer:
     provider = TracerProvider()
     provider.add_span_processor(SimpleSpanProcessor(exporter))
     return trace.get_tracer("forensics", tracer_provider=provider)
