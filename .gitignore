@@ -6,3 +6,4 @@ data/
 node_modules/
 frontend/dist/
 .env
+CLAUDE.md
